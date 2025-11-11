@@ -4,8 +4,14 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RequestForm;
-use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use App\Mail\RequestNotification;
+use Illuminate\Support\Facades\Mail;
 
 class PendingController extends Controller
 {
@@ -155,8 +161,9 @@ class PendingController extends Controller
 
     public function reject($id, Request $request)
     {
-        $requestForm = RequestForm::findOrFail($id);
+        $requestForm = RequestForm::with('user')->findOrFail($id);
         $user = Auth::user();
+        $rejectionReason = $request->input('reason', 'No reason provided');
 
         // Prevent IT Staff from accessing this action
         if ($user->isITStaff()) {
@@ -176,15 +183,42 @@ class PendingController extends Controller
             }
         }
 
-        $requestForm->update([
-            'status' => 'rejected',
-            'rejected_at' => now(),
-            'rejected_by' => $user->id,
-            'rejection_reason' => $request->input('reason', 'No reason provided'),
-        ]);
+        DB::beginTransaction();
+        try {
+            $requestForm->update([
+                'status' => 'rejected',
+                'rejected_at' => now(),
+                'rejected_by' => $user->id,
+                'rejection_reason' => $rejectionReason,
+            ]);
 
-        return redirect()
-            ->route('pending')
-            ->with('success', 'Request rejected successfully.');
+            // Send notification to requester
+            if ($requestForm->user && $requestForm->user->email) {
+                Mail::to($requestForm->user->email)->send(
+                    new RequestNotification($requestForm, 'rejected', $rejectionReason)
+                );
+            }
+
+            // If there's an email field in the form data, send to that as well
+            if (!empty($requestForm->data['email'] ?? null)) {
+                Mail::to($requestForm->data['email'])->send(
+                    new RequestNotification($requestForm, 'rejected', $rejectionReason)
+                );
+            }
+
+            DB::commit();
+            
+            return redirect()
+                ->route('pending')
+                ->with('success', 'Request rejected successfully. Notification sent to requester.');
+                
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error rejecting request: ' . $e->getMessage());
+            
+            return redirect()
+                ->back()
+                ->with('error', 'Failed to reject request. Please try again.');
+        }
     }
 }
