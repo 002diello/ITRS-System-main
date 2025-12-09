@@ -160,7 +160,7 @@
                         <option value="Inpatient">Inpatient</option>
                         <option value="Laboratory">Laboratory</option>
                         <option value="Management Office">Management Office</option>
-                        <option value="Marketing & Brand Comm.">Marketing & Brand Comm.</option>
+                        <option value="Marketing">Marketing</option>
                         <option value="Medical Records">Medical Records</option>
                         <option value="Nursing">Nursing</option>
                         <option value="Pharmacy">Pharmacy</option>

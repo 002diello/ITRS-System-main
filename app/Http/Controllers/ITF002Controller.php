@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\RequestForm;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Mail\RequestNotification;
 
 class ITF002Controller extends Controller
 {
@@ -24,7 +28,7 @@ class ITF002Controller extends Controller
             'nric' => 'required|string',
             'date_of_birth' => 'nullable|date',
             'mobile_number' => 'nullable|string',
-            'email' => 'nullable|email',
+            'email' => 'required|email',
             'Gender' => 'nullable|string',
             'Nationality' => 'nullable|string',
             'MMC Number' => 'nullable|string',
@@ -43,38 +47,59 @@ class ITF002Controller extends Controller
 
         $user = Auth::user();
         $referenceNumber = 'ITF002-' . strtoupper(Str::random(8));
-
-        // ITF002 Doctor Registration is always under Doctor department
         $department = 'Doctor';
 
-        $requestForm = RequestForm::create([
-            'reference_number' => $referenceNumber,
-            'form_code' => 'ITF002',
-            'form_title' => 'Doctor Registration',
-            'user_id' => $user ? $user->id : null,
-            'name' => $validated['name'],
-            'department' => $department,
-            'email' => $validated['email'] ?? null,
-            'phone' => $validated['mobile_number'] ?? null,
-            'nric' => $validated['NRIC / Passport No'] ?? null,
-            'request_data' => $validated,
-            'status' => 'pending',
-        ]);
+        try {
+            $requestForm = RequestForm::create([
+                'reference_number' => $referenceNumber,
+                'form_code' => 'ITF002',
+                'form_title' => 'Doctor Registration',
+                'user_id' => $user ? $user->id : null,
+                'name' => $validated['name'],
+                'department' => $department,
+                'email' => $validated['email'],
+                'phone' => $validated['mobile_number'] ?? null,
+                'nric' => $validated['nric'] ?? null,
+                'request_data' => $validated,
+                'status' => 'pending',
+            ]);
 
-        // Debug information
-        \Log::info('ITF002 Request Created', [
-            'reference_number' => $referenceNumber,
-            'request_id' => $requestForm->id,
-            'user_id' => $user ? $user->id : null,
-            'user_department' => $user ? $user->department : null,
-            'request_department' => $department,
-            'status' => $requestForm->status,
-        ]);
+            // Send email notification to requester
+            if ($requestForm->email) {
+                Mail::to($requestForm->email)->send(
+                    new RequestNotification($requestForm, 'submitted', 'Your doctor registration request has been submitted successfully.')
+                );
+            }
 
-        if ($user) {
-            return redirect()->route('dashboard')->with('success', 'Request submitted successfully. Reference: ' . $referenceNumber);
-        } else {
-            return redirect()->route('home')->with('success', 'Request submitted successfully. Your reference number is: ' . $referenceNumber . '. Please save this for tracking.');
+            // Send notification to HOD
+            $hodEmails = User::whereHas('roles', function($query) {
+                    $query->where('name', 'HOD');
+                })
+                ->where('department', $department)
+                ->pluck('email')
+                ->toArray();
+
+            if (!empty($hodEmails)) {
+                Mail::to($hodEmails)->send(
+                    new RequestNotification($requestForm, 'pending', 'New doctor registration request requires your verification.')
+                );
+            }
+
+            if ($user) {
+                return redirect()->route('dashboard')->with('success', 'Doctor registration request submitted successfully. Reference: ' . $referenceNumber);
+            } else {
+                return redirect()->route('home')->with('success', 'Doctor registration request submitted successfully. Your reference number is: ' . $referenceNumber . '. Please save this for tracking.');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error in ITF002 form submission: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()
+                ->withInput()
+                ->with('error', 'An error occurred while processing your request. Please try again.');
         }
     }
 }
