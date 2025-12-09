@@ -5,19 +5,178 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\RequestForm;
 use App\Models\User;
+use App\Models\Department;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use App\Mail\RequestNotification;
 
+// class ITF001Controller extends Controller
+// {
+//     public function index()
+//     {
+//         return Auth::check()
+//             ? view('forms.itf001')
+//             : view('forms.itf001-public');
+//     }
+
+//     public function store(Request $request)
+//     {
+//         $validated = $request->validate([
+//             'name'               => 'required|string|max:255',
+//             'email'              => 'required|email|max:255',
+//             'department'         => 'required|string|max:255',
+//             'nric'               => 'required|string',
+//             'date_of_birth'      => 'nullable|date',
+//             'Gender'             => 'nullable|string',
+//             'Nationality'        => 'nullable|string',
+//             'Position'           => 'nullable|string',
+//             'request_type'       => 'nullable|array',
+//             'Add Access'         => 'nullable|string',
+//             'Remarks/Other'      => 'nullable|string',
+//         ]);
+
+//         $user = Auth::user();
+//         $referenceNumber = 'ITF001-' . strtoupper(Str::random(8));
+
+//         // Get department from form name
+//         $dept = Department::where('name', $validated['department'])->firstOrFail();
+
+//         $requestForm = RequestForm::create([
+//             'reference_number' => $referenceNumber,
+//             'form_code'        => 'ITF001',
+//             'form_title'       => 'User ID Creation / Amendment / Deactivation',
+//             'user_id'          => $user?->id,
+//             'name'             => $validated['name'],
+//             'department_id'    => $dept->id,
+//             'department'       => $dept->name,           // keeps old column happy
+//             'email'            => $validated['email'],
+//             'request_data'     => $validated,
+//             'status'           => 'pending',
+//         ]);
+
+//         // 1. ONLY HOD(s) of the selected department get email
+//         $hodEmails = User::whereHas('role', fn($q) => $q->where('slug', 'hod'))
+//             ->where('department_id', $dept->id)
+//             ->pluck('email')
+//             ->filter()
+//             ->toArray();
+
+//         if ($hodEmails) {
+//             Mail::to($hodEmails)->queue(new RequestNotification(
+//                 $requestForm,
+//                 'pending',
+//                 "New User ID Request needs your approval.\n\n" .
+//                 "Name: {$requestForm->name}\n" .
+//                 "Department: {$dept->name}\n" .
+//                 "Reference: {$referenceNumber}\n\n" .
+//                 "Please review and verify in the system."
+//             ));
+//         }
+
+//         // 2. Requester gets confirmation (recommended)
+//         Mail::to($requestForm->email)->queue(new RequestNotification(
+//             $requestForm,
+//             'submitted',
+//             "Your User ID request has been submitted successfully!\n\n" .
+//             "Reference: {$referenceNumber}\n" .
+//             "Your HOD has been notified and will review it shortly."
+//         ));
+
+//         return redirect()
+//             ->route($user ? 'dashboard' : 'home')
+//             ->with('success', "Request submitted! Reference: {$referenceNumber}");
+//     }
+// }
+
+//version 3
+// class ITF001Controller extends Controller
+// {
+//     public function index()
+//     {
+//         return Auth::check()
+//             ? view('forms.itf001')
+//             : view('forms.itf001-public');
+//     }
+
+//     public function store(Request $request)
+//     {
+//         $validated = $request->validate([
+//             'name' => 'required|string|max:255',
+//             'email' => 'required|email|max:255',
+//             'department' => 'required|string|max:255',
+//             'nric' => 'required|string',
+//             'date_of_birth' => 'nullable|date',
+//             'Gender' => 'nullable|string',
+//             'Nationality' => 'nullable|string',
+//             'Position' => 'nullable|string',
+//             'request_type' => 'nullable|array',
+//             'Add Access' => 'nullable|string',
+//             'Remarks/Other' => 'nullable|string',
+//         ]);
+
+//         $user = Auth::user();
+//         $referenceNumber = 'ITF001-' . strtoupper(Str::random(8));
+//         $department = Department::where('name', $validated['department'])->firstOrFail();
+
+//         $requestForm = RequestForm::create([
+//             'reference_number' => $referenceNumber,
+//             'form_code' => 'ITF001',
+//             'form_title' => 'User ID Creation / Amendment / Deactivation',
+//             'user_id' => $user ? $user->id : null,
+//             'name' => $validated['name'],
+//             'department_id' => $department->id,
+//             'department' => $department->name,
+//             'email' => $validated['email'],
+//             'phone' => $validated['mobile_number'] ?? null,
+//             'nric' => $validated['nric'] ?? null,
+//             'request_data' => $validated,
+//             'status' => 'pending',
+//         ]);
+
+//         // Notify HODs of the department
+//         $hodEmails = User::whereHas('role', function($q) {
+//                 $q->where('slug', 'hod');
+//             })
+//             ->where('department_id', $department->id)
+//             ->pluck('email')
+//             ->toArray();
+
+//         if (!empty($hodEmails)) {
+//             Mail::to($hodEmails)->queue(new RequestNotification(
+//                 $requestForm,
+//                 'new_request',
+//                 "New User ID request requires your approval.\n\n" .
+//                 "Reference: {$referenceNumber}\n" .
+//                 "Requester: {$validated['name']}\n" .
+//                 "Department: {$department->name}\n\n" .
+//                 "Please review in the system."
+//             ));
+//         }
+
+//         // Notify requester
+//         Mail::to($validated['email'])->queue(new RequestNotification(
+//             $requestForm,
+//             'submitted',
+//             "Your User ID request has been submitted successfully!\n\n" .
+//             "Reference: {$referenceNumber}\n" .
+//             "Your HOD has been notified and will review it shortly."
+//         ));
+
+//         return redirect()
+//             ->route($user ? 'dashboard' : 'home')
+//             ->with('success', "Request submitted! Reference: {$referenceNumber}");
+//     }
+// }
+
+
 class ITF001Controller extends Controller
 {
     public function index()
     {
-        if (Auth::check()) {
-            return view('forms.itf001');
-        }
-        return view('forms.itf001-public');
+        return Auth::check()
+            ? view('forms.itf001')
+            : view('forms.itf001-public');
     }
 
     public function store(Request $request)
@@ -38,9 +197,13 @@ class ITF001Controller extends Controller
 
         $user = Auth::user();
         $referenceNumber = 'ITF001-' . strtoupper(Str::random(8));
-
-        // Get department from form or user's department
-        $department = $validated['department'] ?? (($user && $user->department) ? $user->department : 'IT');
+        
+        // Handle department (could be array or string)
+        $departmentName = is_array($validated['department']) 
+            ? $validated['department'][0] 
+            : $validated['department'];
+            
+        $department = Department::where('name', $departmentName)->firstOrFail();
 
         $requestForm = RequestForm::create([
             'reference_number' => $referenceNumber,
@@ -48,214 +211,48 @@ class ITF001Controller extends Controller
             'form_title' => 'User ID Creation / Amendment / Deactivation',
             'user_id' => $user ? $user->id : null,
             'name' => $validated['name'],
-            'department' => $department,
-            'email' => $validated['email'] ?? ($user ? $user->email : null),
-            'phone' => null,
+            'department_id' => $department->id,
+            'department' => $department->name,
+            'email' => $validated['email'],
+            'phone' => $validated['mobile_number'] ?? null,
             'nric' => $validated['nric'] ?? null,
             'request_data' => $validated,
             'status' => 'pending',
         ]);
 
-        try {
-            // Log the start of email sending
-            \Log::info('Starting to send email notifications for request #' . $requestForm->id);
-            
-            // Send email notification to requester
-            $recipientEmail = $validated['email'] ?? ($user ? $user->email : null);
-            \Log::info('Recipient email: ' . ($recipientEmail ?? 'No recipient email found'));
-            
-            if ($recipientEmail) {
-                \Log::info('Sending submission confirmation to: ' . $recipientEmail);
-                Mail::to($recipientEmail)->send(
-                    new RequestNotification($requestForm, 'submitted', 'Your request has been submitted successfully.')
-                );
-                \Log::info('Submission confirmation sent to: ' . $recipientEmail);
-            }
-
-            // Send notification to HOD
-            $hodEmails = User::whereHas('role', function($query) {
-                    $query->where('slug', 'hod');
-                })
-                ->where('department', $department)
-                ->pluck('email')
-                ->toArray();
-
-            \Log::info('HOD emails to notify: ' . json_encode($hodEmails));
-
-            if (!empty($hodEmails)) {
-                \Log::info('Sending HOD notification to: ' . implode(', ', $hodEmails));
-                Mail::to($hodEmails)->send(
-                    new RequestNotification($requestForm, 'pending', 'New request requires your verification.')
-                );
-                \Log::info('HOD notifications sent successfully');
-            } else {
-                \Log::warning('No HOD emails found for department: ' . $department);
-            }
-        } catch (\Exception $e) {
-            // Log the error but don't break the user experience
-            \Log::error('Failed to send email notification: ' . $e->getMessage());
-        }
-
-        if ($user) {
-            return redirect()->route('dashboard')->with('success', 'Request submitted successfully. Reference: ' . $referenceNumber);
-        } else {
-            return redirect()->route('home')->with('success', 'Request submitted successfully. Your reference number is: ' . $referenceNumber . '. Please save this for tracking.');
-        }
-    }
-
-    public function verifyHod(Request $request, $id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-
-        // Check if user is HOD of the same department
-        if (!$user->hasRole('hod') || $user->department !== $requestForm->department) {
-            return back()->with('error', 'You are not authorized to verify this request.');
-        }
-
-        $requestForm->update([
-            'status' => 'verified',
-            'hod_verified_by' => $user->id,
-            'hod_verified_at' => now(),
-        ]);
-
-        // Notify IT staff
-        $itEmails = User::whereHas('role', function($query) {
-                $query->where('slug', 'it');
+        // 1. Notify HODs of the department
+        $hodEmails = User::whereHas('role', function($q) {
+                $q->where('slug', 'hod');
             })
+            ->where('department_id', $department->id)
             ->pluck('email')
             ->toArray();
 
-        if (!empty($itEmails)) {
-            Mail::to($itEmails)->send(
-                new RequestNotification($requestForm, 'verified', 'Request has been verified by HOD and requires IT action.')
-            );
+        if (!empty($hodEmails)) {
+            \Log::info('Sending new request notification to HODs', ['emails' => $hodEmails]);
+            
+            Mail::to($hodEmails)->queue(new RequestNotification(
+                $requestForm,
+                'new_request',
+                "New User ID request requires your approval.\n\n" .
+                "Reference: {$referenceNumber}\n" .
+                "Requester: {$validated['name']}\n" .
+                "Department: {$department->name}\n\n" .
+                "Please review in the system."
+            ));
         }
 
-        return back()->with('success', 'Request verified successfully.');
-    }
+        // 2. Notify requester
+        Mail::to($validated['email'])->queue(new RequestNotification(
+            $requestForm,
+            'submitted',
+            "Your User ID request has been submitted successfully!\n\n" .
+            "Reference: {$referenceNumber}\n" .
+            "Your HOD has been notified and will review it shortly."
+        ));
 
-    public function approve(Request $request, $id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-
-        // Check if user is authorized to approve
-        if (!$user->hasRole('admin') && !$user->hasRole('it')) {
-            return back()->with('error', 'You are not authorized to approve this request.');
-        }
-
-        $requestForm->update([
-            'status' => 'approved',
-            'approved_by' => $user->id,
-            'approved_at' => now(),
-        ]);
-
-        // Notify requester
-        if ($requestForm->email) {
-            Mail::to($requestForm->email)->send(
-                new RequestNotification($requestForm, 'approved', 'Your request has been approved and is being processed.')
-            );
-        }
-
-        return back()->with('success', 'Request approved successfully.');
-    }
-
-    public function reject(Request $request, $id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-        
-        $validated = $request->validate([
-            'rejection_reason' => 'required|string|max:1000',
-        ]);
-
-        // Check if user is authorized to reject
-        if (!$user->hasRole('admin') && !$user->hasRole('it') && !$user->hasRole('hod')) {
-            return back()->with('error', 'You are not authorized to reject this request.');
-        }
-
-        $requestForm->update([
-            'status' => 'rejected',
-            'rejected_by' => $user->id,
-            'rejected_at' => now(),
-            'rejection_reason' => $validated['rejection_reason'],
-        ]);
-
-        // Notify requester
-        if ($requestForm->email) {
-            Mail::to($requestForm->email)->send(
-                new RequestNotification($requestForm, 'rejected', 'Your request has been rejected. Reason: ' . $validated['rejection_reason'])
-            );
-        }
-
-        return back()->with('success', 'Request rejected successfully.');
-    }
-
-    public function complete(Request $request, $id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-
-        // Check if user is IT staff
-        if (!$user->hasRole('it')) {
-            return back()->with('error', 'You are not authorized to complete this request.');
-        }
-
-        $requestForm->update([
-            'status' => 'completed',
-            'completed_by' => $user->id,
-            'completed_at' => now(),
-        ]);
-
-        // Notify requester
-        if ($requestForm->email) {
-            Mail::to($requestForm->email)->send(
-                new RequestNotification($requestForm, 'completed', 'Your request has been completed.')
-            );
-        }
-
-        return back()->with('success', 'Request marked as completed.');
-    }
-
-    public function assignToMe(Request $request, $id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-
-        if (!$user->hasRole('it')) {
-            return back()->with('error', 'Only IT staff can assign requests to themselves.');
-        }
-
-        $requestForm->update([
-            'assigned_to' => $user->id,
-            'assigned_at' => now(),
-            'status' => 'in_progress',
-        ]);
-
-        // Notify requester
-        if ($requestForm->email) {
-            Mail::to($requestForm->email)->send(
-                new RequestNotification($requestForm, 'assigned', 'Your request has been assigned to an IT staff member.')
-            );
-        }
-
-        return back()->with('success', 'Request assigned to you successfully.');
-    }
-
-    public function view($id)
-    {
-        $requestForm = RequestForm::findOrFail($id);
-        $user = Auth::user();
-
-        // Check if user is authorized to view this request
-        if (!$user->hasRole('admin') && 
-            !$user->hasRole('it') && 
-            !$user->hasRole('hod') && 
-            $requestForm->user_id !== $user->id) {
-            return back()->with('error', 'You are not authorized to view this request.');
-        }
-
-        return view('requests.view', compact('requestForm'));
+        return redirect()
+            ->route($user ? 'dashboard' : 'home')
+            ->with('success', "Request submitted! Reference: {$referenceNumber}");
     }
 }
